@@ -382,7 +382,7 @@ const cols=parseCSVLine(lines[i].trim());if(cols.length<2){skip++;continue}
 let ds=cols[0].trim().replace(/"/g,'');const amt=parseFloat(cols[1].replace(/[^0-9.\-]/g,''));if(!amt||isNaN(amt)){skip++;continue}
 ds=parseD(ds);if(!ds){skip++;continue}
 const raw=(cols[2]||'').trim().replace(/"/g,'').toLowerCase();let cid='food';
-for(const c of CATS){if(raw.includes(c.id)||c.name.toLowerCase().includes(raw)||raw.includes(c.name.toLowerCase().split(' ')[0].toLowerCase())){cid=c.id;break}}
+for(var ci=0;ci<CATS.length;ci++){var c=CATS[ci];var clow=c.name.toLowerCase(),cwords=clow.split(/[\s\/&]+/);if(raw===c.id||raw===clow||cwords.indexOf(raw)>=0||raw.includes(c.id)||c.id.includes(raw)||clow.includes(raw)||raw.includes(cwords[0])){cid=c.id;break}}
 pending.push({id:Date.now()+'-'+i,amount:Math.abs(amt),category:cid,description:(cols[3]||'').trim().replace(/"/g,''),date:ds,type:'variable',createdAt:new Date().toISOString()})
 }
 const pv=document.getElementById('upload-preview'),ib=document.getElementById('import-btn');
@@ -395,7 +395,11 @@ if(pending.length>5)html+=`<div style="padding:8px 0;color:var(--text3)">...and 
 };rd.readAsText(f);ev.target.value=''}
 
 function parseCSVLine(l){const r=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"')q=!q;else if(ch===','&&!q){r.push(c);c=''}else c+=ch}r.push(c);return r}
-function parseD(s){if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){const[y,m,d]=s.split('-');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`}if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`}if(/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)){const[d,m,y]=s.split('-');return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`}return null}
+function parseD(s){
+if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){var p=s.split('-');return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0')}
+if(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s)){var p=s.split('/'),y=p[2];if(y.length===2)y=(parseInt(y)>50?'19':'20')+y;return y+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0')}
+if(/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(s)){var p=s.split('-'),y=p[2];if(y.length===2)y=(parseInt(y)>50?'19':'20')+y;return y+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0')}
+return null}
 
 function confirmImport(){if(!pending.length)return;if(!confirm('Import '+pending.length+' expenses?'))return;S.expenses.push(...pending);save();toast('✓ '+pending.length+' imported!');pending=[];document.getElementById('upload-preview').style.display='none';document.getElementById('import-btn').style.display='none';if(S.sheetsUrl)syncAll()}
 

@@ -469,8 +469,11 @@ body{position:fixed;width:100%;touch-action:pan-y}
 <div class="stat-card"><div class="stat-icon">📊</div><div class="stat-label">Avg/Day</div><div class="stat-value" id="daily-avg">S$0</div></div>
 <div class="stat-card"><div class="stat-icon">🔢</div><div class="stat-label">Txns</div><div class="stat-value" id="txn-count">0</div></div>
 </div>
-<div class="section-title">vs Last Month</div>
+<div class="section-title">Comparison</div>
+<div class="chart-container" style="padding-bottom:10px">
+<div class="chart-toggle" id="cmp-toggle"><button class="active" onclick="setCmpView('weekly',this)">vs Last Week</button><button onclick="setCmpView('monthly',this)">vs Last Month</button></div>
 <div id="mom-comparison"></div>
+</div>
 <div class="section-title">Spending Trend</div>
 <div class="chart-container">
 <div class="chart-toggle" id="trend-toggle"><button class="active" onclick="setTrendView('weekly',this)">Weekly</button><button onclick="setTrendView('monthly',this)">Monthly</button></div>
@@ -599,6 +602,8 @@ function toast(msg,err){var t=document.getElementById('toast');t.textContent=msg
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 
 var trendView='weekly';
+var cmpView='weekly';
+function setCmpView(v,btn){cmpView=v;document.querySelectorAll('#cmp-toggle button').forEach(function(b){b.classList.remove('active')});btn.classList.add('active');drawComparison()}
 function setTrendView(v,btn){trendView=v;document.querySelectorAll('#trend-toggle button').forEach(function(b){b.classList.remove('active')});btn.classList.add('active');drawTrend()}
 
 function refreshDash(){
@@ -620,7 +625,7 @@ document.getElementById('today-spent').textContent=fmt(todT);
 var dom=new Date().getDate();
 document.getElementById('daily-avg').textContent=fmt(dom>0?varT/dom:0);
 document.getElementById('txn-count').textContent=me.length;
-drawTrend();drawDonut(me);drawCatBars(me);drawComparison(me,varT);
+drawTrend();drawDonut(me);drawCatBars(me);drawComparison();
 }
 
 function drawTrend(){
@@ -680,55 +685,76 @@ if(!sorted.length){el.innerHTML='<div class="empty-state"><div class="emoji">�
 el.innerHTML=sorted.map(function(entry){var id=entry[0],t=entry[1];var c=CM[id]||{emoji:'📦',name:id,color:'#7c6df0'};return'<div class="cat-row"><span class="cat-emoji">'+c.emoji+'</span><div class="cat-info"><div class="cat-name">'+c.name+'</div><div class="cat-bar-track"><div class="cat-bar-fill" style="width:'+t/mx*100+'%;background:'+c.color+'"></div></div></div><span class="cat-amount">'+fmt(t)+'</span></div>'}).join('');
 }
 
-function drawComparison(curMonthExps,curVarTotal){
+function drawComparison(){
 var el=document.getElementById('mom-comparison');
 var now=new Date();
+var curExps,prevExps,curLabel,prevLabel;
+
+if(cmpView==='weekly'){
+// Current week: Mon–Sun containing today
+var dayOfWeek=now.getDay();var diff=dayOfWeek===0?6:dayOfWeek-1;// days since Monday
+var curWeekStart=new Date(now);curWeekStart.setDate(now.getDate()-diff);curWeekStart.setHours(0,0,0,0);
+var curWeekEnd=new Date(curWeekStart);curWeekEnd.setDate(curWeekStart.getDate()+6);
+// Previous week
+var prevWeekStart=new Date(curWeekStart);prevWeekStart.setDate(curWeekStart.getDate()-7);
+var prevWeekEnd=new Date(prevWeekStart);prevWeekEnd.setDate(prevWeekStart.getDate()+6);
+
+function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function inRange(eDate,start,end){return eDate>=dateStr(start)&&eDate<=dateStr(end)}
+
+curExps=S.expenses.filter(function(e){return e.date&&inRange(e.date,curWeekStart,curWeekEnd)});
+prevExps=S.expenses.filter(function(e){return e.date&&inRange(e.date,prevWeekStart,prevWeekEnd)});
+
+var fmtShort=function(d){return d.toLocaleDateString('en-SG',{day:'numeric',month:'short'})};
+curLabel='This week ('+fmtShort(curWeekStart)+'–'+fmtShort(curWeekEnd)+')';
+prevLabel='Last week';
+}else{
+// Monthly
+var curYm=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
 var prevDate=new Date(now.getFullYear(),now.getMonth()-1,1);
 var prevYm=prevDate.getFullYear()+'-'+String(prevDate.getMonth()+1).padStart(2,'0');
-var prevMonthName=prevDate.toLocaleDateString('en-SG',{month:'short'});
-var curMonthName=now.toLocaleDateString('en-SG',{month:'short'});
+curExps=S.expenses.filter(function(e){return e.date&&e.date.startsWith(curYm)});
+prevExps=S.expenses.filter(function(e){return e.date&&e.date.startsWith(prevYm)});
+curLabel=now.toLocaleDateString('en-SG',{month:'long'})+' spending';
+prevLabel=prevDate.toLocaleDateString('en-SG',{month:'short'});
+}
 
-// Get previous month expenses
-var prevExps=S.expenses.filter(function(e){return e.date&&e.date.startsWith(prevYm)});
-var prevVarTotal=prevExps.reduce(function(s,e){return s+Number(e.amount)},0);
+var curTotal=curExps.reduce(function(s,e){return s+Number(e.amount)},0);
+var prevTotal=prevExps.reduce(function(s,e){return s+Number(e.amount)},0);
 
-if(prevVarTotal===0&&curVarTotal===0){
-el.innerHTML='<div class="mom-card"><div class="mom-no-data">No data to compare yet. Start tracking to see month-over-month insights.</div></div>';
+if(prevTotal===0&&curTotal===0){
+el.innerHTML='<div class="mom-no-data">No data to compare yet. Keep tracking to see insights here.</div>';
 return;
 }
 
 // Overall change
-var overallPct=prevVarTotal>0?((curVarTotal-prevVarTotal)/prevVarTotal*100):100;
+var overallPct=prevTotal>0?((curTotal-prevTotal)/prevTotal*100):(curTotal>0?100:0);
 var overallDir=overallPct>1?'up':overallPct<-1?'down':'flat';
 var overallSign=overallPct>0?'+':'';
 var overallIcon=overallDir==='up'?'↑':overallDir==='down'?'↓':'→';
 
 // Category breakdown
 var curCats={},prevCats={},allCatIds={};
-curMonthExps.forEach(function(e){curCats[e.category]=(curCats[e.category]||0)+Number(e.amount);allCatIds[e.category]=true});
+curExps.forEach(function(e){curCats[e.category]=(curCats[e.category]||0)+Number(e.amount);allCatIds[e.category]=true});
 prevExps.forEach(function(e){prevCats[e.category]=(prevCats[e.category]||0)+Number(e.amount);allCatIds[e.category]=true});
 
 var catRows=Object.keys(allCatIds).map(function(catId){
 var cur=curCats[catId]||0;
 var prev=prevCats[catId]||0;
 var pct=prev>0?((cur-prev)/prev*100):(cur>0?100:0);
-var diff=cur-prev;
-return{catId:catId,cur:cur,prev:prev,pct:pct,diff:diff,absDiff:Math.abs(diff)};
+var absDiff=Math.abs(cur-prev);
+return{catId:catId,cur:cur,prev:prev,pct:pct,absDiff:absDiff};
 });
-
-// Sort by biggest absolute change
 catRows.sort(function(a,b){return b.absDiff-a.absDiff});
 
-// Find max value for bar scaling
 var maxVal=Math.max.apply(null,catRows.map(function(r){return Math.max(r.cur,r.prev)}).concat([1]));
 
-var html='<div class="mom-card">';
-
-// Header with overall comparison
+var html='';
+// Header
 html+='<div class="mom-header">';
 html+='<div class="mom-header-left">';
-html+='<div class="mom-total">'+fmt(curVarTotal)+'</div>';
-html+='<div class="mom-label">'+curMonthName+' variable spending</div>';
+html+='<div class="mom-total">'+fmt(curTotal)+'</div>';
+html+='<div class="mom-label">'+curLabel+'</div>';
 html+='</div>';
 html+='<div class="mom-badge '+overallDir+'">'+overallIcon+' '+overallSign+Math.round(Math.abs(overallPct))+'%</div>';
 html+='</div>';
@@ -736,11 +762,10 @@ html+='</div>';
 // Category rows
 catRows.forEach(function(row){
 var cat=CM[row.catId]||{emoji:'📦',name:row.catId,color:'#7c6df0'};
-var pctDir=row.pct>2?'up':row.pct<-2?'down':'';
 var isNew=row.prev===0&&row.cur>0;
 var pctLabel='';
 if(isNew){pctLabel='<span class="mom-row-pct new">NEW</span>'}
-else if(Math.abs(row.pct)>2){pctLabel='<span class="mom-row-pct '+pctDir+'">'+(row.pct>0?'+':'')+Math.round(row.pct)+'%</span>'}
+else if(Math.abs(row.pct)>2){var pctDir=row.pct>0?'up':'down';pctLabel='<span class="mom-row-pct '+pctDir+'">'+(row.pct>0?'+':'')+Math.round(row.pct)+'%</span>'}
 
 html+='<div class="mom-row">';
 html+='<span class="mom-row-emoji">'+cat.emoji+'</span>';
@@ -752,12 +777,11 @@ html+='</div>';
 html+='</div>';
 html+='<div class="mom-row-amounts">';
 html+='<div class="mom-row-cur">'+fmt(row.cur)+pctLabel+'</div>';
-html+='<div class="mom-row-prev">'+prevMonthName+': '+fmt(row.prev)+'</div>';
+html+='<div class="mom-row-prev">'+prevLabel+': '+fmt(row.prev)+'</div>';
 html+='</div>';
 html+='</div>';
 });
 
-html+='</div>';
 el.innerHTML=html;
 }
 
